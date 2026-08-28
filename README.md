@@ -28,6 +28,23 @@ Type size is picked automatically: the renderer starts large and steps down
 until everything fits the printable area. Blank fields are skipped without
 leaving gaps.
 
+## Use it from an AI coding agent
+
+[`skills/brother-ql-labels/SKILL.md`](skills/brother-ql-labels/SKILL.md) is a
+ready-made agent skill: it teaches the agent the commands, the CSV column
+aliases, the cutter bits, and the four hardware gotchas below — so it does not
+rediscover them by wasting labels.
+
+```bash
+# Claude Code (per project)
+mkdir -p .claude/skills && cp -r skills/brother-ql-labels .claude/skills/
+
+# Hermes (global)
+cp -r skills/brother-ql-labels ~/.hermes/skills/
+```
+
+Then just ask: *"print these addresses"* and hand over a CSV.
+
 ## Install
 
 ```bash
@@ -217,6 +234,8 @@ kyyhky/
   addresses.py   parsing and formatting
   layout.py      typography, font discovery, auto-fit
   cli.py         command line
+skills/
+  brother-ql-labels/  agent skill (Claude Code / Hermes)
 tools/
   decode_job.py     turn job bytes back into a picture
   show_cut_modes.py show the cutter bits each mode emits
