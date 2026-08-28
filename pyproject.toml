@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kyyhky"
+version = "1.0.0"
+description = "Address labels for the Brother QL-580N over plain TCP, no vendor SDK"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Kim Asplund", email = "kim.asplund@gmail.com" }]
+keywords = [
+    "brother", "ql-580n", "ql-series", "label", "label-printer",
+    "raster", "packbits", "address-labels", "jetdirect", "printing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Printing",
+    "Topic :: Office/Business",
+]
+dependencies = ["pillow>=9.0"]
+
+[project.urls]
+Homepage = "https://github.com/kimasplund/kyyhky"
+Repository = "https://github.com/kimasplund/kyyhky"
+Issues = "https://github.com/kimasplund/kyyhky/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+kyyhky = "kyyhky.cli:main"
+
+[tool.setuptools]
+packages = ["kyyhky"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
