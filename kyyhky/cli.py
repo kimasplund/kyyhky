@@ -11,9 +11,11 @@ from pathlib import Path
 from PIL import Image
 
 from . import addresses as addr_mod
+from . import codes as codes_mod
 from . import layout as layout_mod
 from . import media as media_mod
 from . import protocol as proto
+from . import template as template_mod
 from .addresses import Address
 from .layout import LayoutOptions
 from .protocol import JobOptions, PrinterError
@@ -440,6 +442,245 @@ def cmd_print(a) -> int:
     return 0
 
 
+def _template_from_args(a):
+    """Load a template from --template (file or built-in name)."""
+    name = a.template
+    if os.path.exists(name):
+        return template_mod.load(name)
+    try:
+        return template_mod.builtin(name)
+    except template_mod.TemplateError:
+        if any(sep in name for sep in ("/", "\\", ".")):
+            raise SystemExit(
+                f"kyyhky: template file not found: {name}"
+            )
+        raise SystemExit(
+            f"kyyhky: unknown template {name!r}. "
+            f"Built-ins: {', '.join(sorted(template_mod.BUILTIN))}. "
+            f"Or pass a path to a .json/.yaml file."
+        )
+
+
+def _template_rows(a, tmpl) -> list[dict]:
+    """Rows to render: from --data, from --set, or one sample row."""
+    rows: list[dict] = []
+    if getattr(a, "data", None):
+        try:
+            rows = template_mod.read_rows(a.data)
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"kyyhky: cannot read {a.data}: {exc}")
+        if not rows:
+            raise SystemExit(f"kyyhky: {a.data} has no rows")
+
+    overrides = {}
+    for item in getattr(a, "set", None) or []:
+        key, _, value = item.partition("=")
+        if not _:
+            raise SystemExit(f"kyyhky: --set needs KEY=VALUE, got {item!r}")
+        overrides[key.strip()] = value
+
+    if not rows:
+        if overrides:
+            rows = [overrides]
+        else:
+            rows = [template_mod.sample_row(tmpl)]
+            print("No --data or --set given: rendering one sample row.")
+    elif overrides:
+        rows = [{**r, **overrides} for r in rows]
+
+    limit = getattr(a, "limit", None)
+    if limit:
+        rows = rows[:limit]
+
+    copies_col = getattr(a, "copies_column", None) or "copies"
+    expanded: list[dict] = []
+    for row in rows:
+        n = 1
+        for key, value in row.items():
+            if template_mod._norm_key(key) == template_mod._norm_key(copies_col):
+                try:
+                    n = max(1, int(str(value).strip() or 1))
+                except ValueError:
+                    n = 1
+                break
+        expanded.extend([row] * n)
+    return expanded
+
+
+def _render_template_rows(tmpl, rows, spec, length_dots):
+    """Render every row, collecting per-label warnings."""
+    pages, issues = [], []
+    for i, row in enumerate(rows, 1):
+        try:
+            img, info = template_mod.render(tmpl, row, spec, length_dots)
+        except template_mod.TemplateError as exc:
+            raise SystemExit(f"kyyhky: row {i}: {exc}")
+        pages.append(img)
+        for warning in info["warnings"]:
+            issues.append((i, warning))
+    return pages, issues
+
+
+def cmd_templates(a) -> int:
+    """List the built-in templates."""
+    print("Built-in templates:\n")
+    for name in sorted(template_mod.BUILTIN):
+        tmpl = template_mod.builtin(name)
+        kinds: dict[str, int] = {}
+        for el in tmpl.elements:
+            kinds[el.type] = kinds.get(el.type, 0) + 1
+        parts = ", ".join(f"{n}x {k}" for k, n in sorted(kinds.items()))
+        cols = ", ".join(f"{{{c}}}" for c in tmpl.columns)
+        print(f"  {name:<12} {tmpl.label:<8} {parts}")
+        print(f"  {'':<12} columns: {cols}")
+    print("\nStart from one:   kyyhky template-init asset --out my.json")
+    print("Preview it:       kyyhky template-preview asset --out preview.png")
+    print("Print from CSV:   kyyhky template-print my.json --data rows.csv")
+    return 0
+
+
+def cmd_template_init(a) -> int:
+    """Write a built-in template to a file to edit."""
+    try:
+        text = template_mod.builtin_json(a.name)
+    except template_mod.TemplateError as exc:
+        print(f"kyyhky: {exc}", file=sys.stderr)
+        return 1
+    out = Path(a.out)
+    if out.exists() and not a.force:
+        print(f"kyyhky: {out} exists (use --force to overwrite)", file=sys.stderr)
+        return 1
+    out.write_text(text + "\n", encoding="utf-8")
+    tmpl = template_mod.builtin(a.name)
+    print(f"Wrote {out}")
+    print(f"Media    : {tmpl.label}")
+    print(f"Columns  : {', '.join(tmpl.columns) or '(none)'}")
+    print(f"\nEdit it, then:  kyyhky template-preview {out} --out preview.png")
+    return 0
+
+
+def cmd_template_preview(a) -> int:
+    tmpl = _template_from_args(a)
+    spec = _resolve_media(a) if a.media else media_mod.get(
+        tmpl.label or media_mod.DEFAULT_MEDIA
+    )
+    length_dots = _length_dots(a, spec)
+    rows = _template_rows(a, tmpl)
+
+    print(f"Template: {tmpl.source or a.template}")
+    print(f"Media   : {spec.describe()}")
+    print(f"Labels  : {len(rows)}")
+
+    pages, issues = _render_template_rows(tmpl, rows, spec, length_dots)
+
+    cards = [layout_mod.preview(p, scale=a.scale) for p in pages]
+    out = Path(a.out)
+    if len(cards) == 1:
+        cards[0].save(out)
+    else:
+        w = max(c.width for c in cards)
+        h = sum(c.height for c in cards)
+        sheet = Image.new("L", (w, h), 210)
+        y = 0
+        for c in cards:
+            sheet.paste(c, (0, y))
+            y += c.height
+        sheet.save(out)
+    print(f"\nWrote {out}" + (f" ({len(cards)} labels stacked)" if len(cards) > 1 else ""))
+
+    if issues:
+        print(f"\n{len(issues)} layout warning(s):")
+        for i, warning in issues[:8]:
+            print(f"  row {i}: {warning}")
+    return 0
+
+
+def cmd_template_print(a) -> int:
+    tmpl = _template_from_args(a)
+    spec = _resolve_media(a) if a.media else media_mod.get(
+        tmpl.label or media_mod.DEFAULT_MEDIA
+    )
+    jopts = _job_opts(a)
+    length_dots = _length_dots(a, spec)
+    rows = _template_rows(a, tmpl)
+    host = a.host if a.dry_run else _require_host(a)
+
+    print(f"Printer : {host or '(dry run)'}:{a.port}")
+    print(f"Template: {tmpl.source or a.template}")
+    print(f"Media   : {spec.describe()}")
+    print(f"Labels  : {len(rows)}")
+    print(f"Cut     : {_describe_cut(jopts)}")
+
+    pages, issues = _render_template_rows(tmpl, rows, spec, length_dots)
+
+    if issues:
+        print(f"\n{len(issues)} layout warning(s):")
+        for i, warning in issues[:8]:
+            print(f"  row {i}: {warning}")
+
+    rotate = a.rotate or tmpl.rotate
+    raster_pages = []
+    for img in pages:
+        printer_img = layout_mod.to_printer_space(img, rotate)
+        raster_pages.append(proto.image_to_raster_lines(printer_img, spec, jopts))
+
+    job = proto.build_job(raster_pages, spec, jopts)
+    print(f"\nJob     : {len(job)} bytes ({len(job)/1024:.1f} KiB), "
+          f"{sum(len(p) for p in raster_pages)} raster lines")
+
+    if a.preview:
+        cards = [layout_mod.preview(p) for p in pages]
+        w = max(c.width for c in cards)
+        h = sum(c.height for c in cards)
+        sheet = Image.new("L", (w, h), 210)
+        y = 0
+        for c in cards:
+            sheet.paste(c, (0, y))
+            y += c.height
+        sheet.save(a.preview)
+        print(f"Preview : {a.preview}")
+
+    if a.dry_run:
+        print("Dry run: nothing sent.")
+        if a.save_job:
+            Path(a.save_job).write_bytes(job)
+            print(f"Saved job to {a.save_job}")
+        return 0
+
+    if not a.yes:
+        try:
+            reply = input(f"Print {len(pages)} label(s)? [y/N] ").strip().lower()
+        except EOFError:
+            reply = ""
+        if reply not in ("y", "yes"):
+            print("Cancelled.")
+            return 1
+
+    try:
+        sent = proto.send(job, host, a.port, timeout=a.timeout)
+    except PrinterError as exc:
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 1
+    print(f"Sent {sent} bytes to {host}:{a.port} - printing.")
+    if a.save_job:
+        Path(a.save_job).write_bytes(job)
+        print(f"Saved job to {a.save_job}")
+    return 0
+
+
+def cmd_symbologies(a) -> int:
+    print("Bar code symbologies:\n")
+    for line in codes_mod.describe_symbologies():
+        print(f"  {line}")
+    print("\nQR error correction levels:\n")
+    for level, recovers in codes_mod.QR_ECC.items():
+        print(f"  {level}   recovers {recovers}")
+    print("\nUse in a template:")
+    print('  {"type": "barcode", "data": "{sku}", "symbology": "code128", ...}')
+    print('  {"type": "qr",      "data": "{url}", "ecc": "m", ...}')
+    return 0
+
+
 def cmd_calibrate(a) -> int:
     """Print two probe labels to settle reading direction.
 
@@ -534,9 +775,11 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--port", type=int, default=DEFAULT_PORT)
         sp.add_argument("--timeout", type=float, default=20.0)
 
-    def add_media(sp):
-        sp.add_argument("--media", default=media_mod.DEFAULT_MEDIA,
-                        help=f"label size (default {media_mod.DEFAULT_MEDIA})")
+    def add_media(sp, default=media_mod.DEFAULT_MEDIA):
+        sp.add_argument("--media", default=default,
+                        help=f"label size (default {media_mod.DEFAULT_MEDIA})"
+                        if default else
+                        "label size (default: whatever the template says)")
         sp.add_argument("--length", type=float, default=None,
                         help="label length in mm (continuous tape only)")
 
@@ -626,6 +869,59 @@ def build_parser() -> argparse.ArgumentParser:
     add_conn(sp); add_media(sp); add_layout(sp); add_job(sp)
     sp.add_argument("--dry-run", action="store_true")
     sp.set_defaults(func=cmd_calibrate)
+
+    # --- custom layouts --------------------------------------------------
+
+    def add_template_data(sp):
+        sp.add_argument("--data",
+                        help="CSV/TSV/JSON/JSONL file of rows to render")
+        sp.add_argument("--set", action="append", metavar="KEY=VALUE",
+                        help="set one field directly; repeatable")
+        sp.add_argument("--limit", type=int,
+                        help="only render the first N rows")
+        sp.add_argument("--copies-column", default="copies",
+                        help="column holding a per-row copy count "
+                             "(default: copies)")
+
+    sp = sub.add_parser("templates", help="list the built-in label templates")
+    sp.set_defaults(func=cmd_templates)
+
+    sp = sub.add_parser("symbologies",
+                        help="list bar code symbologies and QR options")
+    sp.set_defaults(func=cmd_symbologies)
+
+    sp = sub.add_parser("template-init",
+                        help="write a built-in template out as JSON to edit")
+    sp.add_argument("name", help="built-in template name (see 'templates')")
+    sp.add_argument("--out", default="label.json")
+    sp.add_argument("--force", action="store_true",
+                    help="overwrite an existing file")
+    sp.set_defaults(func=cmd_template_init)
+
+    sp = sub.add_parser("template-preview",
+                        help="render a custom template to PNG")
+    sp.add_argument("template",
+                    help="template file (.json/.yaml) or built-in name")
+    add_template_data(sp)
+    add_media(sp, default=None)
+    sp.add_argument("--out", default="preview.png")
+    sp.add_argument("--scale", type=int, default=1)
+    sp.set_defaults(func=cmd_template_preview)
+
+    sp = sub.add_parser("template-print",
+                        help="print labels from a custom template")
+    sp.add_argument("template",
+                    help="template file (.json/.yaml) or built-in name")
+    add_template_data(sp)
+    add_conn(sp); add_media(sp, default=None); add_job(sp)
+    sp.add_argument("--rotate", choices=["cw", "ccw"], default=None,
+                    help="override the template's rotation")
+    sp.add_argument("--preview", help="also write a PNG of what will print")
+    sp.add_argument("-y", "--yes", action="store_true",
+                    help="skip confirmation")
+    sp.add_argument("--dry-run", action="store_true")
+    sp.add_argument("--save-job", help="also write the raw job bytes here")
+    sp.set_defaults(func=cmd_template_print)
 
     return p
 

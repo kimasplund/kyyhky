@@ -1,34 +1,49 @@
 ---
 name: brother-ql-labels
-description: "Print address labels on a networked Brother QL-580N."
-version: 1.0.0
+description: "Print labels on a networked Brother QL printer."
+version: 1.1.0
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
   hermes:
-    tags: [Printing, Labels, Brother, QL-580N, Addresses, CSV, Raster]
+    tags: [Printing, Labels, Brother, QL-580N, Addresses, Barcode, QR, CSV]
 ---
 
-# Brother QL-580N address labels (Kyyhky)
+# Brother QL labels (Kyyhky)
 
 ## When to Use
 
-Use whenever the user wants something **printed on a physical label** — address
-labels for post, shipping, parcels, filing, or storage. Triggers include:
-"print a label", "print these addresses", "label this parcel", "send this to
-the label printer", or handing over a CSV/spreadsheet of recipients.
+Use whenever the user wants something **printed on a physical label** —
+addresses for post, shipping, parcels, filing, storage, asset tags, product
+labels, name badges, or anything with a **bar code or QR code** on it.
+Triggers include: "print a label", "print these addresses", "label this
+parcel", "make asset tags", "print barcode labels", "QR labels for these
+links", or handing over a CSV/spreadsheet.
 
 Also use it to diagnose a QL-580N: blank labels, mirrored text, jobs that
 vanish silently, or cutter behaviour.
 
 **Not** for PDF/paper documents, and not for designing artwork.
 
+## Two modes
+
+1. **Addresses** — `kyyhky print --csv addr.csv`. Auto-sized type, no layout
+   work needed.
+2. **Anything else** — a JSON/YAML **template** listing elements (text, bar
+   code, QR, image, line, box) at millimetre positions, filled from a CSV.
+   Start with `kyyhky templates` to see the built-ins.
+
+Reach for a template as soon as the label is not purely an address.
+
 ## Setup
 
 ```bash
-pip install git+https://github.com/kimasplund/kyyhky
+pip install "kyyhky[all] @ git+https://github.com/kimasplund/kyyhky"
 export KYYHKY_HOST=192.168.1.50      # or pass --host on every command
 ```
+
+The `[all]` extra pulls in `segno` (QR), `python-barcode` and `PyYAML`.
+Plain `pip install git+...` is enough for addresses only.
 
 Find the printer if the address is unknown: `kyyhky discover`.
 
@@ -43,6 +58,8 @@ kyyhky discover                    # scan the LAN for printers
 kyyhky status                      # is the printer reachable?
 kyyhky media                       # supported label sizes
 kyyhky fonts                       # usable font families
+kyyhky templates                   # built-in custom layouts
+kyyhky symbologies                 # bar code types + QR options
 kyyhky sample --out addr.csv       # example CSV to fill in
 
 # ALWAYS preview before printing -- it costs nothing
@@ -62,6 +79,83 @@ Omit `--yes` for an interactive confirmation. `--dry-run` builds the job and
 reports its size without sending anything.
 
 Running from a clone instead of an install: `python3 -m kyyhky.cli ...`.
+
+## Custom layouts (bar codes, QR, anything non-address)
+
+```bash
+kyyhky templates                              # what is built in
+kyyhky template-init asset --out my.json      # copy one out to edit
+kyyhky template-preview my.json --data items.csv --out check.png
+kyyhky template-print my.json --data items.csv --yes
+```
+
+Built-ins: `address`, `shipping`, `asset`, `product`, `qr-only`,
+`name-badge`. Preview any of them with no data at all —
+`kyyhky template-preview asset --out a.png` renders a sample row.
+
+A template is a media size plus a list of elements. **Positions are
+millimetres from the top-left**, as you would measure with a ruler:
+
+```json
+{
+  "label": "29x90",
+  "elements": [
+    {"type": "text",    "text": "{name}", "x": 4, "y": 2, "size": 4.5,
+     "bold": true, "max_width": 52},
+    {"type": "text",    "text": "{id}",   "x": 4, "y": 8, "size": 3.2},
+    {"type": "barcode", "data": "{id}",   "x": 4, "y": 12.5,
+     "width": 52, "height": 8, "symbology": "code128"},
+    {"type": "qr",      "data": "{url}",  "x": -4, "y": 2, "size": 24}
+  ]
+}
+```
+
+| Type | Key options |
+|------|-------------|
+| `text` | `text`, `size` (mm), `bold`, `max_width`, `align`, `font` |
+| `barcode` | `data`, `symbology`, `width` or `module`, `height`, `text_below` |
+| `qr` | `data`, `size` or `module`, `ecc` (l/m/q/h), `micro` |
+| `image` | `path`, `width`, `height`, `threshold`, `invert` |
+| `line` | `x`, `y`, `x2`/`y2` or `length` + `vertical`, `thickness` |
+| `box` | `x`, `y`, `width`, `height`, `thickness`, `filled` |
+
+Rules worth knowing:
+
+* `{column}` placeholders match **case-, space- and underscore-insensitively**,
+  so `{Product Name}` and `{product_name}` read the same CSV column. A missing
+  column renders empty rather than failing.
+* **Negative `x`/`y` anchor to the right/bottom edge** — `"x": -4` sits 4 mm
+  in from the right.
+* Omit `x` and set `align` to `center`/`right`; omit `y` and set `valign` to
+  `middle`/`bottom`.
+* Any length can be given in dots with an `_dots` suffix (`"x_dots": 120`).
+* `max_width` shrinks text to fit instead of running off the label.
+* A `copies` column prints that row more than once.
+* Without `--data`, use `--set key=value` (repeatable) for a one-off label.
+
+Rendering **warns** when elements run off the label or **collide with each
+other**. Read those warnings — they are the difference between a good label
+and a wasted one.
+
+## Bar codes and QR
+
+`code128` is the right default for anything alphanumeric. `kyyhky symbologies`
+lists all 13 with what each accepts.
+
+Both are rendered from the raw module matrix at an **exact integer number of
+printer dots per module**, never by scaling a bitmap. This is what makes small
+codes scan reliably; quiet zones are included automatically. Verified on
+hardware — printed labels scan with a phone.
+
+Gotchas:
+
+* `code39` appends a `$` checksum in most libraries. Kyyhky turns that **off**
+  by default; pass `"checksum": true` if you need it.
+* `ean13`/`upca` require an exact digit count and add their own check digit.
+  A wrong length is an error naming the offending element.
+* QR `size` is the box it must fit inside; the module size is computed from it.
+  A tight `size` on a busy payload gives a code too dense to scan — prefer
+  fewer characters (a short URL) over a smaller module.
 
 ## Label layout
 
@@ -214,6 +308,12 @@ when media or firmware changes.
 | `status` shows nothing | expected; the Ethernet board has no status channel |
 | `discover` finds nothing | cold ARP cache; it already sweeps twice, try `--timeout 1.0` |
 | Text clipped | shorten the address or lower `--min-size`; watch for `<-- TIGHT` |
+| Bar code will not scan | narrow bar too thin — raise `module` to 2-3 dots, or give the element more `width` |
+| QR will not scan | payload too long for the box; shorten the URL or raise `size` |
+| `unknown symbology 'qr'` | QR is its own element type, not a symbology |
+| `code39` prints a trailing `$` | that is the checksum; it is off by default here |
+| Elements printed on top of each other | the render warning said so — read it and adjust |
+| Template ignored the media | `--media` overrides the template; drop it to use the template's own |
 
 ## Tests
 
@@ -221,7 +321,12 @@ when media or firmware changes.
 python3 -m pytest tests/ -q
 ```
 
-47 tests, green on Python 3.9-3.13 in CI. The PackBits encoder is validated
+86 tests, green on Python 3.9-3.13 in CI. The PackBits encoder is validated
 against Brother's own worked example from the manual, every media spec is
 checked to account for all 720 pins, and a regression test asserts ink never
 lands outside the live print window (the bug that produced blank labels).
+
+Code tests decode a rendered row back into run lengths and assert **every bar
+and QR module is an exact whole number of dots wide** — the property that
+decides whether a small printed code scans. Every built-in template is
+rendered and checked for overflow and collisions.

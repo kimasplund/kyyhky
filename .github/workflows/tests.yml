@@ -37,9 +37,22 @@ jobs:
           python -m kyyhky.cli --version
           python -m kyyhky.cli media
           python -m kyyhky.cli fonts
+          python -m kyyhky.cli templates
+          python -m kyyhky.cli symbologies
 
       - name: Build a job without a printer
         run: |
           python -m kyyhky.cli sample --out /tmp/addr.csv
           python -m kyyhky.cli preview --csv /tmp/addr.csv --out /tmp/labels.png
           python -m kyyhky.cli print --csv /tmp/addr.csv --dry-run
+
+      - name: Custom templates, bar codes and QR
+        run: |
+          printf 'name,id\nOscilloscope,LAB-0001\nBench PSU,LAB-0002\n' > /tmp/items.csv
+          for t in address shipping asset product qr-only name-badge; do
+            python -m kyyhky.cli template-preview "$t" --out "/tmp/$t.png"
+          done
+          python -m kyyhky.cli template-init asset --out /tmp/my.json
+          python -m kyyhky.cli template-preview /tmp/my.json --data /tmp/items.csv --out /tmp/batch.png
+          python -m kyyhky.cli template-print /tmp/my.json --data /tmp/items.csv --dry-run
+          python -m kyyhky.cli template-print asset --set name=Rig --set id=R-1 --dry-run

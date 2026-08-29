@@ -26,3 +26,4 @@ addr.csv
 .idea/
 *.swp
 .DS_Store
+uv.lock

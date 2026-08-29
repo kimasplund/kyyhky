@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kyyhky"
-version = "1.0.0"
-description = "Address labels for the Brother QL-580N over plain TCP, no vendor SDK"
+version = "1.1.0"
+description = "Labels for Brother QL printers over plain TCP: addresses, bar codes, QR codes, custom layouts. No vendor SDK."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -13,6 +13,7 @@ authors = [{ name = "Kim Asplund", email = "kim.asplund@gmail.com" }]
 keywords = [
     "brother", "ql-580n", "ql-series", "label", "label-printer",
     "raster", "packbits", "address-labels", "jetdirect", "printing",
+    "barcode", "qrcode", "code128", "ean13", "label-template",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -38,7 +39,12 @@ Repository = "https://github.com/kimasplund/kyyhky"
 Issues = "https://github.com/kimasplund/kyyhky/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+qr = ["segno>=1.5"]
+barcode = ["python-barcode>=0.15"]
+yaml = ["PyYAML>=5.4"]
+codes = ["segno>=1.5", "python-barcode>=0.15"]
+all = ["segno>=1.5", "python-barcode>=0.15", "PyYAML>=5.4"]
+dev = ["pytest>=7.0", "segno>=1.5", "python-barcode>=0.15", "PyYAML>=5.4"]
 
 [project.scripts]
 kyyhky = "kyyhky.cli:main"
