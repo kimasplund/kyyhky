@@ -14,8 +14,6 @@ Per the raster-line diagram in section 3.2.5 the FIRST byte of a raster line
 holds the right-margin pins and the LAST byte holds the left-margin pins.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 #: Total pins on the QL-580N print head (also QL-500/550/560/570/650TD/700).

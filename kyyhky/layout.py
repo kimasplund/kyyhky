@@ -6,8 +6,6 @@ preview.  :func:`to_printer_space` performs the final rotation into the
 orientation the print head expects.
 """
 
-from __future__ import annotations
-
 import functools
 import glob
 import os

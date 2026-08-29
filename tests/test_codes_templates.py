@@ -1,7 +1,5 @@
 """Tests for bar codes, QR codes and custom layouts."""
 
-from __future__ import annotations
-
 import json
 
 import pytest

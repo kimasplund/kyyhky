@@ -11,8 +11,6 @@ the view that should read correctly.  Printing without that reversal produced
 mirrored text on real hardware.
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path

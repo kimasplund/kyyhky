@@ -321,7 +321,7 @@ when media or firmware changes.
 python3 -m pytest tests/ -q
 ```
 
-86 tests, green on Python 3.9-3.13 in CI. The PackBits encoder is validated
+86 tests, green on Python 3.11-3.14 in CI. The PackBits encoder is validated
 against Brother's own worked example from the manual, every media spec is
 checked to account for all 720 pins, and a regression test asserts ink never
 lands outside the live print window (the bug that produced blank labels).

@@ -16,8 +16,6 @@ Two facts about the QL-580N over Ethernet drive this whole module:
    LAN board, so we must not block waiting for it.
 """
 
-from __future__ import annotations
-
 import socket
 import time
 from dataclasses import dataclass

@@ -11,8 +11,6 @@ every bar and every QR cell exactly the same width, which is the single
 biggest factor in whether a small printed code scans reliably.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont

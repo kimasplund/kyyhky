@@ -23,8 +23,6 @@ spaces and underscores, so ``{Product Name}``, ``{product_name}`` and
 ``{productname}`` all read the same CSV column.
 """
 
-from __future__ import annotations
-
 import csv
 import io
 import json

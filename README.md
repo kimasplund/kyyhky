@@ -153,7 +153,7 @@ cd kyyhky
 pip install -e ".[all]"
 ```
 
-Requires Python 3.9+ and Pillow. On a minimal system also install a font —
+Requires Python 3.11+ and Pillow. On a minimal system also install a font —
 `fonts-dejavu-core` on Debian/Ubuntu. Check what was found with `kyyhky fonts`.
 
 ## Supported hardware

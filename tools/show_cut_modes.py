@@ -4,8 +4,6 @@ Two commands govern cutting and they are easy to get subtly wrong, so this
 prints the decoded bytes for every mode side by side.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

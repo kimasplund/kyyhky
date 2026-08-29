@@ -4,8 +4,6 @@ The column names accepted are deliberately generous (English, Finnish and
 Swedish) so a spreadsheet exported from almost anywhere just works.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 import re
