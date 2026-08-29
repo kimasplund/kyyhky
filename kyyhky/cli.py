@@ -16,6 +16,7 @@ from . import protocol as proto
 from . import template as template_mod
 from .addresses import Address
 from .layout import LayoutOptions
+from .version import __version__
 from .protocol import JobOptions, PrinterError
 
 #: Printer address.  There is no sensible universal default for a LAN device,
@@ -765,7 +766,8 @@ def build_parser() -> argparse.ArgumentParser:
             "               --postal 'SW1X 8RL' --city London --country 'United Kingdom'\n"
         ),
     )
-    p.add_argument("--version", action="version", version="kyyhky 1.0.0")
+    p.add_argument("--version", action="version",
+                   version=f"kyyhky {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     def add_conn(sp):

@@ -37,7 +37,7 @@ from .template import (
 )
 from .template import render as render_template
 
-__version__ = "1.1.0"
+from .version import __version__  # noqa: E402
 __all__ = [
     "Address",
     "CodeError",
